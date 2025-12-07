@@ -46,7 +46,7 @@
             value="100"
           />
           <p class="field-hint">
-            Number of customers in the cohort. LTV is calculated per customer; totals use this size.
+            Number of customers in the cohort. LTV is calculated per customer; totals scale with this.
           </p>
         </div>
 
@@ -144,7 +144,7 @@
               value="24"
               oninput="syncHorizonLabel(this.value)"
             />
-            <span id="horizonLabel">24 periods</span>
+            <span id="horizonLabel">24 months</span>
           </div>
           <p class="field-hint">
             How long you want to track the cohort (e.g., 24 months).
@@ -221,14 +221,14 @@
       <!-- KPI STRIP -->
       <div class="kpi-strip">
         <div class="kpi-card">
-          <p class="kpi-label">LTV per Customer (Revenue)</p>
+          <p class="kpi-label">LTV per Customer · Revenue</p>
           <p class="kpi-value" id="ltvRevenuePerCustomer">–</p>
           <p class="kpi-tag">
             Over <span id="kpiHorizonLabel">–</span>
           </p>
         </div>
         <div class="kpi-card">
-          <p class="kpi-label">LTV per Customer (Gross Margin)</p>
+          <p class="kpi-label">LTV per Customer · Gross Margin</p>
           <p class="kpi-value" id="ltvMarginPerCustomer">–</p>
           <p class="kpi-tag">
             Using <span id="kpiMarginLabel">–</span> gross margin
