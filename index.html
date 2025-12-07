@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Operator Blueprints – LTV Calculator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo-dot"></div>
+      <div class="topbar-title-group">
+        <h1>Operator Blueprints</h1>
+        <p class="topbar-subtitle">LTV Calculator Tool</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="badge">Style A · Minimalist Operator Dashboard</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- INPUTS PANEL -->
+    <section class="panel panel-inputs">
+      <h2>Assumptions</h2>
+      <p class="panel-subtitle">
+        Set your unit economics and retention curve to calculate LTV with confidence.
+      </p>
+
+      <form
+        id="ltv-form"
+        class="form-grid"
+        onsubmit="event.preventDefault(); runLTV();"
+      >
+        <!-- Cohort & unit economics -->
+        <div class="form-field">
+          <label for="cohortSize">Cohort Size (Customers)</label>
+          <input
+            type="number"
+            id="cohortSize"
+            min="1"
+            step="1"
+            value="100"
+          />
+          <p class="field-hint">
+            Number of customers in the cohort. LTV is calculated per customer; totals use this size.
+          </p>
+        </div>
+
+        <div class="form-field">
+          <label for="aov">Average Order Value (AOV)</label>
+          <div class="input-prefix">
+            <span class="prefix">$</span>
+            <input
+              type="number"
+              id="aov"
+              min="0"
+              step="1"
+              value="80"
+              required
+            />
+          </div>
+          <p class="field-hint">
+            Average order size per transaction.
+          </p>
+        </div>
+
+        <div class="form-field">
+          <label for="ordersPerPeriod">Orders per Customer per Period</label>
+          <input
+            type="number"
+            id="ordersPerPeriod"
+            min="0"
+            step="0.1"
+            value="1"
+          />
+          <p class="field-hint">
+            Average number of orders each active customer places per period.
+          </p>
+        </div>
+
+        <div class="form-field">
+          <label for="grossMargin">Gross Margin %</label>
+          <input
+            type="number"
+            id="grossMargin"
+            min="0"
+            max="100"
+            step="0.5"
+            value="65"
+          />
+          <p class="field-hint">
+            Gross margin percentage (after COGS, before marketing and overhead).
+          </p>
+        </div>
+
+        <div class="form-field">
+          <label for="cac">CAC per Customer (Optional)</label>
+          <div class="input-prefix">
+            <span class="prefix">$</span>
+            <input
+              type="number"
+              id="cac"
+              min="0"
+              step="1"
+              placeholder="e.g. 40"
+            />
+          </div>
+          <p class="field-hint">
+            Average cost to acquire one customer. Used for LTV:CAC and payback period.
+          </p>
+        </div>
+
+        <!-- Retention & horizon -->
+        <div class="form-divider"></div>
+        <h3 class="section-subheading">Retention · Horizon · Discounting</h3>
+
+        <div class="form-field">
+          <label for="churnRate">Churn Rate per Period</label>
+          <input
+            type="number"
+            id="churnRate"
+            min="0"
+            max="100"
+            step="0.1"
+            value="8"
+          />
+          <p class="field-hint">
+            Percentage of remaining customers who churn each period (e.g., 8 for 8%).
+          </p>
+        </div>
+
+        <div class="form-field">
+          <label for="horizon">Number of Periods</label>
+          <div class="range-row">
+            <input
+              type="range"
+              id="horizon"
+              min="3"
+              max="60"
+              value="24"
+              oninput="syncHorizonLabel(this.value)"
+            />
+            <span id="horizonLabel">24 periods</span>
+          </div>
+          <p class="field-hint">
+            How long you want to track the cohort (e.g., 24 months).
+          </p>
+        </div>
+
+        <div class="form-field">
+          <label for="timeUnit">Time Unit</label>
+          <select
+            id="timeUnit"
+            class="select-input"
+            onchange="syncHorizonLabel(document.getElementById('horizon').value)"
+          >
+            <option value="month" selected>Months</option>
+            <option value="week">Weeks</option>
+            <option value="year">Years</option>
+          </select>
+          <p class="field-hint">
+            Controls the period used in the retention and LTV curve.
+          </p>
+        </div>
+
+        <div class="form-field">
+          <label for="discountRate">Discount Rate per Period (Optional)</label>
+          <div class="input-suffix">
+            <input
+              type="number"
+              id="discountRate"
+              min="0"
+              max="100"
+              step="0.1"
+              placeholder="0"
+            />
+            <span class="suffix">%</span>
+          </div>
+          <p class="field-hint">
+            Used to calculate discounted LTV if you want to account for time value of money.
+          </p>
+        </div>
+
+        <!-- Actions -->
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn-secondary"
+            onclick="resetLTVInputs()"
+          >
+            Reset Inputs
+          </button>
+          <button type="submit" class="btn-primary">
+            Run LTV
+          </button>
+        </div>
+      </form>
+
+      <div class="assumption-note">
+        <h3>How this LTV model works</h3>
+        <p>
+          We start with a single customer and apply churn each period to get active customers.
+          Each active customer places orders at your specified frequency and AOV. Revenue is
+          multiplied by your gross margin and optionally discounted. LTV per customer is then
+          scaled to your cohort size and compared to CAC to show LTV:CAC and payback.
+        </p>
+      </div>
+    </section>
+
+    <!-- OUTPUT PANEL -->
+    <section class="panel panel-output">
+      <h2>LTV Output</h2>
+      <p class="panel-subtitle">
+        Per-customer and cohort-level LTV, retention curve, and payback window.
+      </p>
+
+      <!-- KPI STRIP -->
+      <div class="kpi-strip">
+        <div class="kpi-card">
+          <p class="kpi-label">LTV per Customer (Revenue)</p>
+          <p class="kpi-value" id="ltvRevenuePerCustomer">–</p>
+          <p class="kpi-tag">
+            Over <span id="kpiHorizonLabel">–</span>
+          </p>
+        </div>
+        <div class="kpi-card">
+          <p class="kpi-label">LTV per Customer (Gross Margin)</p>
+          <p class="kpi-value" id="ltvMarginPerCustomer">–</p>
+          <p class="kpi-tag">
+            Using <span id="kpiMarginLabel">–</span> gross margin
+          </p>
+        </div>
+        <div class="kpi-card">
+          <p class="kpi-label">LTV : CAC</p>
+          <p class="kpi-value" id="ltvCACRatio">–</p>
+          <p class="kpi-tag" id="ltvCACNote">
+            Add CAC to see LTV:CAC and payback.
+          </p>
+        </div>
+        <div class="kpi-card">
+          <p class="kpi-label">Total Cohort Gross Margin</p>
+          <p class="kpi-value" id="ltvMarginCohort">–</p>
+          <p class="kpi-tag">
+            Based on cohort size and horizon.
+          </p>
+        </div>
+      </div>
+
+      <!-- OUTPUT ACTIONS -->
+      <div class="output-actions">
+        <button
+          type="button"
+          class="btn-secondary"
+          onclick="downloadLTVCsv()"
+        >
+          Download CSV
+        </button>
+      </div>
+
+      <!-- CHART -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h3>LTV & Retention Curve</h3>
+          <p>
+            Active customers over time and cumulative gross-margin LTV per customer.
+          </p>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="ltvChart"></canvas>
+        </div>
+      </div>
+
+      <!-- TEXTUAL SUMMARY -->
+      <div class="summary-card">
+        <h3>Scenario Summary</h3>
+        <ul id="summaryList" class="summary-list">
+          <li>Run the LTV model to populate your summary.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Operator Blueprints · LTV Calculator</span>
+    <span>Speed is the moat · Precision is the standard</span>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
