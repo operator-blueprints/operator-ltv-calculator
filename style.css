@@ -1,3 +1,4 @@
+
 :root {
   --bg: #050816;
   --bg-elevated: #080c18;
@@ -231,7 +232,7 @@ input[type="range"] {
   );
 }
 
-/* Growth mode row (not used in LTV but kept for consistency) */
+/* Growth mode row */
 
 .mode-row {
   display: inline-flex;
@@ -260,7 +261,7 @@ input[type="range"] {
   white-space: nowrap;
 }
 
-/* Implied row (reused styling) */
+/* Implied revenue row */
 
 .implied-row {
   display: flex;
