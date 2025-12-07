@@ -1,5 +1,7 @@
 let ltvChart = null;
 
+/* ---------- helpers ---------- */
+
 function parseNumber(id) {
   const el = document.getElementById(id);
   if (!el) return 0;
@@ -29,10 +31,12 @@ function formatNumber(value) {
 
 function formatRatio(value) {
   if (!Number.isFinite(value) || value <= 0) return "–";
-  return value.toLocaleString("en-US", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  }) + "x";
+  return (
+    value.toLocaleString("en-US", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }) + "x"
+  );
 }
 
 function timeUnitLabel(unit, plural = true) {
@@ -40,6 +44,8 @@ function timeUnitLabel(unit, plural = true) {
   if (unit === "year") return plural ? "years" : "year";
   return plural ? "months" : "month";
 }
+
+/* ---------- UI sync ---------- */
 
 function syncHorizonLabel(value) {
   const n = Number(value) || 0;
@@ -62,12 +68,10 @@ function resetSummary() {
     "Add CAC to see LTV:CAC and payback.";
 
   const summaryList = document.getElementById("summaryList");
-  if (summaryList) {
-    summaryList.innerHTML = "";
-    const li = document.createElement("li");
-    li.textContent = "Run the LTV model to populate your summary.";
-    summaryList.appendChild(li);
-  }
+  summaryList.innerHTML = "";
+  const li = document.createElement("li");
+  li.textContent = "Run the LTV model to populate your summary.";
+  summaryList.appendChild(li);
 
   if (ltvChart) {
     ltvChart.data.labels = [];
@@ -76,6 +80,8 @@ function resetSummary() {
     ltvChart.update();
   }
 }
+
+/* ---------- core model ---------- */
 
 function runLTV() {
   const cohortSize = Math.max(parseNumber("cohortSize"), 1);
@@ -90,7 +96,11 @@ function runLTV() {
   const unit = document.getElementById("timeUnit").value || "month";
 
   // Basic validation
-  if (aov <= 0 || ordersPerPeriod <= 0 || grossMarginPct < 0 || grossMarginPct > 100) {
+  if (aov <= 0 || ordersPerPeriod <= 0) {
+    resetSummary();
+    return;
+  }
+  if (grossMarginPct < 0 || grossMarginPct > 100) {
     resetSummary();
     return;
   }
@@ -108,15 +118,14 @@ function runLTV() {
   let cumulativeMarginPerCustomer = 0;
 
   const labels = [];
-  const activeSeries = [];
-  const ltvSeries = [];
+  const activeSeries = []; // percent of cohort
+  const ltvSeries = []; // cumulative margin LTV per customer
 
   let paybackPeriod = null;
   let runningMarginVsCAC = 0;
 
   for (let t = 1; t <= horizon; t++) {
-    const periodLabel = `${t}`;
-    labels.push(periodLabel);
+    labels.push(String(t));
 
     if (t === 1) {
       activeCustomers = 1;
@@ -128,14 +137,15 @@ function runLTV() {
     const revenue = orders * aov;
     const margin = revenue * marginRate;
 
-    const discountFactor = discountRate > 0 ? 1 / Math.pow(1 + discountRate, t - 1) : 1;
+    const discountFactor =
+      discountRate > 0 ? 1 / Math.pow(1 + discountRate, t - 1) : 1;
     const discountedRevenue = revenue * discountFactor;
     const discountedMargin = margin * discountFactor;
 
     cumulativeRevenuePerCustomer += discountedRevenue;
     cumulativeMarginPerCustomer += discountedMargin;
 
-    activeSeries.push(activeCustomers * 100); // % of original cohort
+    activeSeries.push(activeCustomers * 100); // %
     ltvSeries.push(cumulativeMarginPerCustomer);
 
     if (cac > 0 && paybackPeriod === null) {
@@ -150,7 +160,7 @@ function runLTV() {
   const ltvMarginPerCustomer = cumulativeMarginPerCustomer;
   const ltvMarginCohort = ltvMarginPerCustomer * cohortSize;
 
-  // Update KPIs
+  // KPIs
   document.getElementById("ltvRevenuePerCustomer").textContent =
     formatCurrency(ltvRevenuePerCustomer);
   document.getElementById("ltvMarginPerCustomer").textContent =
@@ -185,23 +195,27 @@ function runLTV() {
     ltvCACNoteEl.textContent = "Add CAC to see LTV:CAC and payback.";
   }
 
-  // Summary list
+  // Summary
   const summaryList = document.getElementById("summaryList");
   summaryList.innerHTML = "";
+
+  const finalActivePct = activeSeries[activeSeries.length - 1];
 
   const li1 = document.createElement("li");
   li1.textContent = `Over ${horizon} ${timeUnitLabel(
     unit,
     horizon !== 1
-  )}, LTV per customer (revenue) is ${formatCurrency(ltvRevenuePerCustomer)}, with gross-margin LTV of ${formatCurrency(
-    ltvMarginPerCustomer
-  )}.`;
+  )}, LTV per customer (revenue) is ${formatCurrency(
+    ltvRevenuePerCustomer
+  )}, with gross-margin LTV of ${formatCurrency(ltvMarginPerCustomer)}.`;
   summaryList.appendChild(li1);
 
   const li2 = document.createElement("li");
   li2.textContent = `Your model assumes ${ordersPerPeriod.toFixed(
     2
-  )} orders per ${timeUnitLabel(unit)} at an AOV of ${formatCurrency(aov)}, with ${grossMarginPct.toFixed(
+  )} orders per ${timeUnitLabel(
+    unit
+  )} at an AOV of ${formatCurrency(aov)}, with ${grossMarginPct.toFixed(
     1
   )}% gross margin.`;
   summaryList.appendChild(li2);
@@ -209,9 +223,11 @@ function runLTV() {
   const li3 = document.createElement("li");
   li3.textContent = `Churn is ${churnPct.toFixed(
     1
-  )}% per ${timeUnitLabel(unit)}, meaning only ${formatNumber(
-    activeSeries[activeSeries.length - 1]
-  )}% of the original cohort remains active by the end of the horizon.`;
+  )}% per ${timeUnitLabel(
+    unit
+  )}, leaving about ${finalActivePct.toFixed(
+    1
+  )}% of the original cohort still active by the end of the horizon.`;
   summaryList.appendChild(li3);
 
   if (cac > 0) {
@@ -233,101 +249,105 @@ function runLTV() {
   renderLtvChart(labels, activeSeries, ltvSeries, unit);
 }
 
+/* ---------- chart ---------- */
+
 function renderLtvChart(labels, activeSeries, ltvSeries, unit) {
   const ctx = document.getElementById("ltvChart");
   if (!ctx) return;
 
+  const config = {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Active Customers (% of Cohort)",
+          data: activeSeries,
+          borderColor: "#38bdf8",
+          backgroundColor: "rgba(56, 189, 248, 0.2)",
+          borderWidth: 2,
+          tension: 0.25,
+          yAxisID: "y",
+        },
+        {
+          label: "Cumulative Gross-Margin LTV per Customer (USD)",
+          data: ltvSeries,
+          borderColor: "#a855f7",
+          backgroundColor: "rgba(168, 85, 247, 0.15)",
+          borderWidth: 2,
+          tension: 0.25,
+          yAxisID: "y1",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false,
+      },
+      plugins: {
+        legend: {
+          labels: {
+            color: "#e5e7eb",
+            font: { size: 11 },
+          },
+        },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const label = context.dataset.label || "";
+              const value = context.parsed.y;
+              if (label.includes("LTV")) {
+                return `${label}: ${formatCurrency(value)}`;
+              }
+              return `${label}: ${value.toFixed(1)}%`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: "#9ca3af",
+          },
+          grid: {
+            color: "rgba(55, 65, 81, 0.6)",
+          },
+          title: {
+            display: true,
+            text: `Period (${timeUnitLabel(unit)})`,
+            color: "#9ca3af",
+            font: { size: 11 },
+          },
+        },
+        y: {
+          position: "left",
+          ticks: {
+            color: "#9ca3af",
+            callback: (value) => `${value.toFixed(0)}%`,
+          },
+          grid: {
+            color: "rgba(31, 41, 55, 0.7)",
+          },
+        },
+        y1: {
+          position: "right",
+          ticks: {
+            color: "#9ca3af",
+            callback: (value) => "$" + value.toFixed(0),
+          },
+          grid: {
+            drawOnChartArea: false,
+          },
+        },
+      },
+    },
+  };
+
   if (!ltvChart) {
-    ltvChart = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels,
-        datasets: [
-          {
-            label: "Active Customers (% of Cohort)",
-            data: activeSeries,
-            borderColor: "#38bdf8",
-            backgroundColor: "rgba(56, 189, 248, 0.2)",
-            borderWidth: 2,
-            tension: 0.25,
-            yAxisID: "y",
-          },
-          {
-            label: "Cumulative Gross-Margin LTV per Customer (USD)",
-            data: ltvSeries,
-            borderColor: "#a855f7",
-            backgroundColor: "rgba(168, 85, 247, 0.15)",
-            borderWidth: 2,
-            tension: 0.25,
-            yAxisID: "y1",
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: {
-          mode: "index",
-          intersect: false,
-        },
-        plugins: {
-          legend: {
-            labels: {
-              color: "#e5e7eb",
-              font: { size: 11 },
-            },
-          },
-          tooltip: {
-            callbacks: {
-              label(context) {
-                const label = context.dataset.label || "";
-                const value = context.parsed.y;
-                if (label.includes("LTV")) {
-                  return `${label}: ${formatCurrency(value)}`;
-                }
-                return `${label}: ${value.toFixed(1)}%`;
-              },
-            },
-          },
-        },
-        scales: {
-          x: {
-            ticks: {
-              color: "#9ca3af",
-            },
-            grid: {
-              color: "rgba(55, 65, 81, 0.6)",
-            },
-            title: {
-              display: true,
-              text: `Period (${timeUnitLabel(unit)})`,
-              color: "#9ca3af",
-              font: { size: 11 },
-            },
-          },
-          y: {
-            position: "left",
-            ticks: {
-              color: "#9ca3af",
-              callback: (value) => `${value.toFixed(0)}%`,
-            },
-            grid: {
-              color: "rgba(31, 41, 55, 0.7)",
-            },
-          },
-          y1: {
-            position: "right",
-            ticks: {
-              color: "#9ca3af",
-              callback: (value) => "$" + value.toFixed(0),
-            },
-            grid: {
-              drawOnChartArea: false,
-            },
-          },
-        },
-      },
-    });
+    ltvChart = new Chart(ctx, config);
   } else {
     ltvChart.data.labels = labels;
     ltvChart.data.datasets[0].data = activeSeries;
@@ -337,11 +357,12 @@ function renderLtvChart(labels, activeSeries, ltvSeries, unit) {
   }
 }
 
+/* ---------- reset & init ---------- */
+
 function resetLTVInputs() {
   const form = document.getElementById("ltv-form");
   if (form) form.reset();
 
-  // Restore defaults
   document.getElementById("cohortSize").value = "100";
   document.getElementById("aov").value = "80";
   document.getElementById("ordersPerPeriod").value = "1";
@@ -349,6 +370,8 @@ function resetLTVInputs() {
   document.getElementById("churnRate").value = "8";
   document.getElementById("horizon").value = "24";
   document.getElementById("timeUnit").value = "month";
+  document.getElementById("discountRate").value = "";
+  document.getElementById("cac").value = "";
 
   syncHorizonLabel(24);
   resetSummary();
@@ -362,22 +385,17 @@ function downloadLTVCsv() {
   const churnPct = parseNumber("churnRate");
   const horizon = Math.max(parseNumber("horizon"), 1);
   const discountPct = parseNumber("discountRate");
-  const cac = parseNumber("cac");
   const unit = document.getElementById("timeUnit").value || "month";
 
-  if (aov <= 0 || ordersPerPeriod <= 0 || grossMarginPct < 0 || grossMarginPct > 100) {
-    return;
-  }
-  if (churnPct < 0 || churnPct >= 100) {
-    return;
-  }
+  if (aov <= 0 || ordersPerPeriod <= 0) return;
+  if (grossMarginPct < 0 || grossMarginPct > 100) return;
+  if (churnPct < 0 || churnPct >= 100) return;
 
   const churn = churnPct / 100;
   const marginRate = grossMarginPct / 100;
   const discountRate = discountPct > 0 ? discountPct / 100 : 0;
 
   let activeCustomers = 1;
-  let cumulativeRevenuePerCustomer = 0;
   let cumulativeMarginPerCustomer = 0;
 
   let csv =
@@ -394,13 +412,12 @@ function downloadLTVCsv() {
     const revenue = orders * aov;
     const margin = revenue * marginRate;
 
-    const discountFactor = discountRate > 0 ? 1 / Math.pow(1 + discountRate, t - 1) : 1;
+    const discountFactor =
+      discountRate > 0 ? 1 / Math.pow(1 + discountRate, t - 1) : 1;
     const discountedRevenue = revenue * discountFactor;
     const discountedMargin = margin * discountFactor;
 
-    cumulativeRevenuePerCustomer += discountedRevenue;
     cumulativeMarginPerCustomer += discountedMargin;
-
     const cumulativeMarginCohort = cumulativeMarginPerCustomer * cohortSize;
 
     csv += [
@@ -424,14 +441,12 @@ function downloadLTVCsv() {
   URL.revokeObjectURL(url);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  // Initial label sync
-  const horizonInput = document.getElementById("horizon");
-  if (horizonInput) {
-    syncHorizonLabel(horizonInput.value);
-  }
+/* ---------- boot ---------- */
 
-  // Live recalc on change
+document.addEventListener("DOMContentLoaded", () => {
+  const horizonInput = document.getElementById("horizon");
+  if (horizonInput) syncHorizonLabel(horizonInput.value);
+
   const inputsToWatch = [
     "cohortSize",
     "aov",
@@ -451,7 +466,6 @@ document.addEventListener("DOMContentLoaded", () => {
     el.addEventListener("change", () => runLTV());
   });
 
-  // First render
   resetSummary();
   runLTV();
 });
